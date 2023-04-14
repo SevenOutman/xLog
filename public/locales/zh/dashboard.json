@@ -15,6 +15,7 @@
   "Site Duration": "站点运行时间",
   "days": "天",
   "Deleted!" : "已删除！",
+  "Fail to Deleted." : "删除失败",
   "Converted!" : "已转换！",
   "Failed to convert." : "转换失败。",
   "All Posts": "所有文章",
@@ -168,6 +169,7 @@
   "DNS check passed.": "DNS 检查通过。",
   "DNS check failed.": "DNS 检查失败。",
   "Recheck": "重新检查",
+  "Hottest": "最热",
   "Latest": "最新",
   "Following": "关注",
   "Create a Post": "创建文章",
@@ -176,5 +178,9 @@
   "Participate in the development of xLog": "参与 xLog 的开发",
   "Follow xLog's Twitter": "关注 xLog 的 Twitter",
   "Check out the updates of other bloggers": "查看其他博主的更新",
-  "You have already imported them, please enter the post page to create a new post!": "您已经导入了它们，请进入文章页面创建新的文章吧。"
+  "You have already imported them, please enter the post page to create a new post!": "您已经导入了它们，请进入文章页面创建新的文章吧。",
+  "Today": "今天",
+  "This month": "本月",
+  "This week": "本周",
+  "All time": "全部"
 }

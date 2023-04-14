@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useMemo } from "react"
 import { getPageVisibility } from "~/lib/page-helpers"
 import { useDate } from "~/hooks/useDate"
 import { TabItem, Tabs } from "../ui/Tabs"
@@ -8,23 +8,18 @@ import { PageVisibilityEnum } from "~/lib/types"
 import { DashboardMain } from "./DashboardMain"
 import { useRouter } from "next/router"
 import Link from "next/link"
-import toast from "react-hot-toast"
 import { EmptyState } from "../ui/EmptyState"
-import type { Note } from "unidata.js"
-import {
-  useGetPagesBySite,
-  useDeletePage,
-  useCreateOrUpdatePage,
-} from "~/queries/page"
-import { delStorage, getStorage, setStorage } from "~/lib/storage"
+import { useGetPagesBySite } from "~/queries/page"
+import { setStorage } from "~/lib/storage"
 import { useQueryClient } from "@tanstack/react-query"
 import { Button } from "../ui/Button"
 import { UniLink } from "../ui/UniLink"
 import { nanoid } from "nanoid"
 import { Tooltip } from "../ui/Tooltip"
-import { APP_NAME } from "~/lib/env"
 import { Trans, useTranslation } from "next-i18next"
 import { readFiles } from "~/lib/read-files"
+import { PagesManagerMenu } from "./PagesManagerMenu"
+import { useMobileLayout } from "~/hooks/useMobileLayout"
 
 export const PagesManager: React.FC<{
   isPost: boolean
@@ -40,37 +35,10 @@ export const PagesManager: React.FC<{
     [router.query.visibility],
   )
 
-  const deletePage = useDeletePage()
-  const createOrUpdatePage = useCreateOrUpdatePage()
-  const [convertToastId, setConvertToastId] = useState("")
-  const [deleteToastId, setDeleteToastId] = useState("")
   const { t } = useTranslation(["dashboard", "site"])
   const date = useDate()
 
-  useEffect(() => {
-    if (deletePage.isSuccess) {
-      toast.success(t("Deleted!"), {
-        id: deleteToastId,
-      })
-    }
-  }, [deletePage.isSuccess, deleteToastId, t])
-
-  useEffect(() => {
-    if (createOrUpdatePage.isSuccess) {
-      toast.success(t("Converted!"), {
-        id: convertToastId,
-      })
-    } else if (createOrUpdatePage.isError) {
-      toast.error(t("Failed to convert."), {
-        id: convertToastId,
-      })
-    }
-  }, [
-    createOrUpdatePage.isSuccess,
-    createOrUpdatePage.isError,
-    convertToastId,
-    t,
-  ])
+  const isMobileLayout = useMobileLayout()
 
   const pages = useGetPagesBySite({
     type: isPost ? "post" : "page",
@@ -125,91 +93,6 @@ export const PagesManager: React.FC<{
   }
 
   const queryClient = useQueryClient()
-  const getPageMenuItems = (page: Note) => {
-    const isCrossbell = !page.applications?.includes("xlog")
-    return [
-      {
-        text: "Edit",
-        icon: <span className="i-mingcute:edit-line inline-block"></span>,
-        onClick() {
-          router.push(getPageEditLink(page))
-        },
-      },
-      {
-        text:
-          "Convert to " +
-          (isCrossbell
-            ? `${APP_NAME} ${isPost ? "Post" : "Page"}`
-            : isPost
-            ? "Page"
-            : "Post"),
-        icon: <span className="i-mingcute:transfer-3-line inline-block"></span>,
-        onClick() {
-          const toastId = toast.loading("Converting...")
-          if (isCrossbell) {
-            setConvertToastId(toastId)
-            createOrUpdatePage.mutate({
-              published: true,
-              pageId: page.id,
-              siteId: subdomain,
-              tags: page.tags
-                ?.filter((tag) => tag !== "post" && tag !== "page")
-                ?.join(", "),
-              isPost: isPost,
-              applications: page.applications,
-            })
-          } else {
-            if (!page.metadata) {
-              const data = getStorage(`draft-${subdomain}-${page.id}`)
-              data.isPost = !isPost
-              setStorage(`draft-${subdomain}-${page.id}`, data)
-              queryClient.invalidateQueries(["getPagesBySite", subdomain])
-              queryClient.invalidateQueries(["getPage", page.id])
-              toast.success("Converted!", {
-                id: toastId,
-              })
-            } else {
-              setConvertToastId(toastId)
-              createOrUpdatePage.mutate({
-                published: true,
-                pageId: page.id,
-                siteId: subdomain,
-                tags: page.tags
-                  ?.filter((tag) => tag !== "post" && tag !== "page")
-                  ?.join(", "),
-                isPost: !isPost,
-                applications: page.applications,
-              })
-            }
-          }
-        },
-      },
-      {
-        text: "Delete",
-        icon: <span className="i-mingcute:delete-2-line inline-block"></span>,
-        onClick() {
-          if (!page.metadata) {
-            const toastId = toast.loading("Deleting...")
-            delStorage(`draft-${subdomain}-${page.id}`)
-            Promise.all([
-              queryClient.refetchQueries(["getPagesBySite", subdomain]),
-              queryClient.refetchQueries(["getPage", page.id]),
-            ]).then(() => {
-              toast.success("Deleted!", {
-                id: toastId,
-              })
-            })
-          } else {
-            setDeleteToastId(toast.loading("Deleting..."))
-            deletePage.mutate({
-              site: subdomain,
-              id: page.id,
-            })
-          }
-        },
-      },
-    ]
-  }
 
   const importFile = () => {
     const input = document.createElement("input")
@@ -365,7 +248,7 @@ export const PagesManager: React.FC<{
                 </div>
                 <div className="w-10 flex-shrink-0">
                   <Menu>
-                    {({ open }: { open: boolean }) => (
+                    {({ open, close }) => (
                       <>
                         <Menu.Button as={Fragment}>
                           <button
@@ -380,27 +263,12 @@ export const PagesManager: React.FC<{
                             <i className="i-mingcute:more-1-line text-2xl" />
                           </button>
                         </Menu.Button>
-                        <Menu.Items className="text-sm absolute z-20 right-0 bg-white shadow-modal rounded-lg overflow-hidden py-2 w-64">
-                          {getPageMenuItems(page).map((item) => {
-                            return (
-                              <Menu.Item key={item.text}>
-                                <button
-                                  type="button"
-                                  className="h-10 flex w-full space-x-2 items-center px-3 hover:bg-gray-100"
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    item.onClick()
-                                  }}
-                                >
-                                  <span className="inline-flex">
-                                    {item.icon}
-                                  </span>
-                                  <span>{t(item.text)}</span>
-                                </button>
-                              </Menu.Item>
-                            )
-                          })}
-                        </Menu.Items>
+
+                        <PagesManagerMenu
+                          isPost={isPost}
+                          page={page}
+                          onClick={close}
+                        />
                       </>
                     )}
                   </Menu>

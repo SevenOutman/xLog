@@ -8,6 +8,11 @@
     @apply fill-zinc-800;
     font-family: var(--font-fans);
   }
+
+  input,
+  textarea {
+    @apply bg-white;
+  }
 }
 
 *,
@@ -16,8 +21,37 @@
   border-color: var(--border-color);
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: theme("colors.white");
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--theme-color);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hover-color);
+}
+
+::-webkit-scrollbar-corner {
+  background: theme("colors.white");
+}
+
+::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--theme-color);
+  border: 3px solid theme("colors.white");
+  border-radius: 5px;
+}
+
 body {
-  @apply break-words;
+  @apply break-words bg-white;
 }
 
 .container {
@@ -354,4 +388,12 @@ textarea.input {
   border-bottom-color: currentColor;
   border-right-color: currentColor;
   @apply animate-spin;
+}
+
+.xlog-lottie-logo path[fill="rgb(0,0,0)"] {
+  @apply fill-current;
+}
+
+.katex-html {
+  @apply overflow-x-auto;
 }

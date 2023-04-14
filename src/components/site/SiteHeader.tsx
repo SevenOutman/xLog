@@ -20,6 +20,9 @@ import { Menu } from "~/components/ui/Menu"
 import { useTranslation } from "next-i18next"
 import { Tooltip } from "~/components/ui/Tooltip"
 import { PatronButton } from "~/components/common/PatronButton"
+import { Modal } from "~/components/ui/Modal"
+import { SearchInput } from "~/components/common/SearchInput"
+import { useMediaStore } from "~/hooks/useDarkMode"
 
 type HeaderLinkType = {
   icon?: React.ReactNode
@@ -113,11 +116,24 @@ export const SiteHeader: React.FC<{
       url: `/feed/xml`,
       out: true,
     },
+    {
+      text: "Search on this site",
+      icon: (
+        <span className="text-stone-400">
+          <i className="i-mingcute:search-line block" />
+        </span>
+      ),
+      onClick: () => setSearchOpen(true),
+      out: true,
+    },
   ]
+
+  const [searchOpen, setSearchOpen] = useState(false)
 
   const avatarRef = useRef<HTMLImageElement>(null)
   const bannerRef = useRef<HTMLImageElement | HTMLVideoElement>(null)
 
+  const isDark = useMediaStore((state) => state.isDark)
   const [averageColor, setAverageColor] = useState<string>()
   const [autoHoverColor, setAutoHoverColor] = useState<string>()
   const [autoThemeColor, setAutoThemeColor] = useState<string>()
@@ -127,8 +143,13 @@ export const SiteHeader: React.FC<{
       fac
         .getColorAsync(bannerRef.current)
         .then((color) => {
-          setAverageColor(chroma(color.hex).hex())
-          setAutoHoverColor(chroma(color.hex).luminance(0.8).hex())
+          if (isDark) {
+            setAverageColor(chroma(color.hex).luminance(0.007).hex())
+            setAutoHoverColor(chroma(color.hex).luminance(0.02).hex())
+          } else {
+            setAverageColor(chroma(color.hex).hex())
+            setAutoHoverColor(chroma(color.hex).luminance(0.8).hex())
+          }
           setAutoThemeColor(chroma(color.hex).saturate(3).luminance(0.3).hex())
         })
         .catch((e) => {
@@ -138,15 +159,20 @@ export const SiteHeader: React.FC<{
       fac
         .getColorAsync(avatarRef.current)
         .then((color) => {
-          setAverageColor(chroma(color.hex).luminance(0.95).hex())
-          setAutoHoverColor(chroma(color.hex).luminance(0.8).hex())
+          if (isDark) {
+            setAverageColor(chroma(color.hex).luminance(0.007).hex())
+            setAutoHoverColor(chroma(color.hex).luminance(0.02).hex())
+          } else {
+            setAverageColor(chroma(color.hex).luminance(0.95).hex())
+            setAutoHoverColor(chroma(color.hex).luminance(0.8).hex())
+          }
           setAutoThemeColor(chroma(color.hex).saturate(3).luminance(0.3).hex())
         })
         .catch((e) => {
           console.warn(e)
         })
     }
-  }, [bannerRef, avatarRef])
+  }, [bannerRef, avatarRef, isDark])
 
   return (
     <header className="xlog-header border-b border-zinc-100 relative">
@@ -233,15 +259,16 @@ export const SiteHeader: React.FC<{
                         </Button>
                       }
                       dropdown={
-                        <div className="text-gray-600 bg-white rounded-lg ring-1 ring-zinc-100 shadow-md py-2 text-sm">
+                        <div className="text-gray-600 bg-white rounded-lg ring-1 ring-border shadow-md py-2 text-sm">
                           {moreMenuItems.map((item) => {
                             return (
                               <UniLink
                                 key={item.text}
                                 href={item.url}
+                                onClick={item.onClick}
                                 className="h-10 flex w-full space-x-2 items-center px-3 hover:bg-hover"
                               >
-                                <span className="fill-gray-500 flex w-4 h-4">
+                                <span className="fill-gray-500 flex items-center w-4 h-4 text-base leading-none">
                                   {item.icon}
                                 </span>
                                 <span>{t(item.text)}</span>
@@ -253,30 +280,35 @@ export const SiteHeader: React.FC<{
                     />
                   </div>
                   <div className="xlog-site-more-out hidden sm:block">
-                    {moreMenuItems.map((item) => {
-                      if (item.out) {
-                        return (
-                          <Tooltip
-                            label={t(item.text)}
-                            key={item.text}
-                            placement="bottom"
-                          >
-                            <Button
-                              variant="text"
-                              aria-label={item.text}
-                              className="-mx-2"
-                              onClick={() => window.open(item.url, "_blank")}
+                    <div className="-mx-2 flex">
+                      {moreMenuItems.map((item) => {
+                        if (item.out) {
+                          return (
+                            <Tooltip
+                              label={t(item.text)}
+                              key={item.text}
+                              placement="bottom"
                             >
-                              <span className="fill-gray-500 flex w-6 h-6">
-                                {item.icon}
-                              </span>
-                            </Button>
-                          </Tooltip>
-                        )
-                      } else {
-                        return null
-                      }
-                    })}
+                              <Button
+                                variant="text"
+                                aria-label={item.text}
+                                onClick={() =>
+                                  item.url
+                                    ? window.open(item.url, "_blank")
+                                    : item.onClick?.()
+                                }
+                              >
+                                <span className="fill-gray-500 flex w-6 h-6 text-2xl">
+                                  {item.icon}
+                                </span>
+                              </Button>
+                            </Tooltip>
+                          )
+                        } else {
+                          return null
+                        }
+                      })}
+                    </div>
                   </div>
                   <div className="xlog-site-follow-button">
                     <FollowingButton site={site} />
@@ -311,6 +343,11 @@ export const SiteHeader: React.FC<{
           </div>
         </div>
       </div>
+      <Modal open={searchOpen} setOpen={setSearchOpen}>
+        <div className="p-3">
+          <SearchInput noBorder={true} onSubmit={() => setSearchOpen(false)} />
+        </div>
+      </Modal>
     </header>
   )
 }

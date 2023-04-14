@@ -5,6 +5,7 @@ import { useRouter } from "next/router"
 import { Image } from "~/components/ui/Image"
 import { useTranslation } from "next-i18next"
 import { useGetFeed } from "~/queries/home"
+import type { FeedType, SearchType } from "~/models/home.model"
 import { CharacterFloatCard } from "~/components/common/CharacterFloatCard"
 import { useAccountState } from "@crossbell/connect-kit"
 import InfiniteScroll from "react-infinite-scroller"
@@ -14,13 +15,17 @@ import { Switch } from "@headlessui/react"
 import { setStorage, getStorage } from "~/lib/storage"
 import { Tooltip } from "~/components/ui/Tooltip"
 import { Titles } from "~/components/common/Titles"
+import { Tabs } from "~/components/ui/Tabs"
+import reactStringReplace from "react-string-replace"
 
 const Post = ({
   post,
   filtering,
+  keyword,
 }: {
   post: ExpandedNote
   filtering: number
+  keyword?: string
 }) => {
   const router = useRouter()
   const { t } = useTranslation(["common", "site"])
@@ -103,6 +108,12 @@ const Post = ({
                   ))}
               </span>
             )}
+            {post.stat?.viewDetailCount && (
+              <span className="xlog-post-views inline-flex items-center">
+                <i className="i-mingcute:eye-line mr-[2px]" />
+                <span>{post.stat?.viewDetailCount}</span>
+              </span>
+            )}
           </div>
           <div
             className="xlog-post-excerpt mt-3 text-zinc-500 line-clamp-2"
@@ -110,7 +121,17 @@ const Post = ({
               wordBreak: "break-word",
             }}
           >
-            {post.metadata?.content?.summary}
+            {keyword
+              ? reactStringReplace(
+                  post.metadata?.content?.summary || "",
+                  keyword,
+                  (match, i) => (
+                    <span key={i} className="bg-yellow-200">
+                      {match}
+                    </span>
+                  ),
+                )
+              : post.metadata?.content?.summary}
             {post.metadata?.content?.summary && "..."}
           </div>
         </div>
@@ -130,28 +151,71 @@ const Post = ({
 }
 
 export const MainFeed: React.FC<{
-  type?: "latest" | "recommend" | "following" | "topic"
+  type?: FeedType
   noteIds?: string[]
-}> = ({ type, noteIds }) => {
+  keyword?: string
+}> = ({ type, noteIds, keyword }) => {
   const { t } = useTranslation(["common", "site"])
 
   const currentCharacterId = useAccountState(
     (s) => s.computed.account?.characterId,
   )
 
+  const [hotInterval, setHotInterval] = useState(7)
+  const [searchType, setSearchType] = useState<SearchType>("latest")
+
   const feed = useGetFeed({
     type: type,
     characterId: currentCharacterId,
     noteIds: noteIds,
+    daysInterval: hotInterval,
+    searchKeyword: keyword,
+    searchType,
   })
 
   const hasFiltering = type === "latest"
 
-  const [aiFiltering, setAiFiltering] = useState(false)
+  const [aiFiltering, setAiFiltering] = useState(true)
 
   useEffect(() => {
-    setAiFiltering(getStorage("ai_filtering")?.enabled || false)
+    setAiFiltering(getStorage("ai_filtering")?.enabled || true)
   }, [])
+
+  const hotTabs = [
+    {
+      text: "Today",
+      onClick: () => setHotInterval(1),
+      active: hotInterval === 1,
+    },
+    {
+      text: "This week",
+      onClick: () => setHotInterval(7),
+      active: hotInterval === 7,
+    },
+    {
+      text: "This month",
+      onClick: () => setHotInterval(30),
+      active: hotInterval === 30,
+    },
+    {
+      text: "All time",
+      onClick: () => setHotInterval(0),
+      active: hotInterval === 0,
+    },
+  ]
+
+  const searchTabs = [
+    {
+      text: "Latest",
+      onClick: () => setSearchType("latest"),
+      active: searchType === "latest",
+    },
+    {
+      text: "Hottest",
+      onClick: () => setSearchType("hot"),
+      active: searchType === "hot",
+    },
+  ]
 
   return (
     <>
@@ -202,12 +266,18 @@ export const MainFeed: React.FC<{
             </Switch>
           </div>
         )}
+        {type === "hot" && (
+          <Tabs items={hotTabs} className="border-none text-sm -my-4"></Tabs>
+        )}
+        {type === "search" && (
+          <Tabs items={searchTabs} className="border-none text-sm -my-4"></Tabs>
+        )}
         {feed.isLoading ? (
           <div className="text-center text-zinc-600">{t("Loading")}...</div>
         ) : !feed.data?.pages[0]?.count ? (
           <EmptyState />
         ) : (
-          <div className="xlog-posts space-y-8">
+          <div className="xlog-posts space-y-8 overflow-x-hidden">
             {feed.data?.pages.map((posts) =>
               posts?.list.map((post) => {
                 return (
@@ -215,6 +285,7 @@ export const MainFeed: React.FC<{
                     key={`${post.characterId}-${post.noteId}`}
                     post={post}
                     filtering={aiFiltering ? 60 : 0}
+                    keyword={keyword}
                   />
                 )
               }),

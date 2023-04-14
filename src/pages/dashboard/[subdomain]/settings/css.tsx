@@ -5,7 +5,7 @@ import { DashboardLayout } from "~/components/dashboard/DashboardLayout"
 import { SettingsLayout } from "~/components/dashboard/SettingsLayout"
 import { Button } from "~/components/ui/Button"
 import { useGetSite, useUpdateSite } from "~/queries/site"
-import Editor from "@monaco-editor/react"
+
 import { FieldLabel } from "~/components/ui/FieldLabel"
 import type { ReactElement } from "react"
 import { useTranslation } from "next-i18next"
@@ -14,6 +14,7 @@ import { GetServerSideProps } from "next"
 import { serverSidePropsHandler } from "~/lib/server-side-props"
 import { setStorage, getStorage } from "~/lib/storage"
 import { getSiteLink } from "~/lib/helpers"
+import { MonacoEditor } from "~/components/common/Monaco"
 
 export const getServerSideProps: GetServerSideProps = serverSidePropsHandler(
   async (ctx) => {
@@ -149,13 +150,14 @@ export default function SettingsCSSPage() {
             </p>
           </div>
           <FieldLabel label={t("Custom CSS")} />
-          <Editor
+          <MonacoEditor
             className="w-full h-96 border outline-none py-3 rounded-lg inline-flex items-center overflow-hidden"
             defaultLanguage="css"
             defaultValue={css}
             onChange={(value) => setCss(value || "")}
             options={{
               fontSize: 14,
+              minimap: { enabled: false },
             }}
           />
         </div>

@@ -5,7 +5,7 @@ import { useAccountState, useConnectModal } from "@crossbell/connect-kit"
 import { dehydrate, QueryClient } from "@tanstack/react-query"
 import { prefetchGetSites } from "~/queries/site.server"
 import showcase from "../../data/showcase.json"
-import { useAccountSites } from "~/queries/site"
+import type { FeedType } from "~/models/home.model"
 import { serverSideTranslations } from "next-i18next/serverSideTranslations"
 import { languageDetector } from "~/lib/language-detector"
 import { MainFeed } from "~/components/main/MainFeed"
@@ -36,21 +36,22 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 }
 
 function Activities() {
-  const userSite = useAccountSites()
-
   const currentCharacterId = useAccountState(
     (s) => s.computed.account?.characterId,
   )
   const connectModal = useConnectModal()
 
-  const [feedType, setFeedType] = useState<"latest" | "following">(
-    userSite.data?.length ? "following" : "latest",
-  )
+  const [feedType, setFeedType] = useState<FeedType>("latest")
   const tabs = [
     {
       text: "Latest",
       onClick: () => setFeedType("latest"),
       active: feedType === "latest",
+    },
+    {
+      text: "Hottest",
+      onClick: () => setFeedType("hot"),
+      active: feedType === "hot",
     },
     {
       text: "Following",

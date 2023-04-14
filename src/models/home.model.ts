@@ -1,61 +1,11 @@
 import { ExpandedNote } from "~/lib/types"
 import { indexer } from "@crossbell/indexer"
-import { toCid } from "~/lib/ipfs-parser"
 import { createClient, cacheExchange, fetchExchange } from "@urql/core"
-import { SITE_URL, SCORE_API_DOMAIN } from "~/lib/env"
+import dayjs from "dayjs"
+import { expandCrossbellNote } from "~/lib/expand-unit"
 
-const expandPage = async (
-  page: ExpandedNote,
-  useStat?: boolean,
-  useScore?: boolean,
-) => {
-  if (page.metadata?.content) {
-    if (page.metadata?.content?.content) {
-      const { renderPageContent } = await import("~/markdown")
-      const rendered = renderPageContent(page.metadata.content.content, true)
-      if (!page.metadata.content.summary) {
-        page.metadata.content.summary = rendered.excerpt
-      }
-      page.metadata.content.cover = rendered.cover
-      if (page.metadata) {
-        page.metadata.content.frontMatter = rendered.frontMatter
-      }
-    }
-    page.metadata.content.slug = encodeURIComponent(
-      page.metadata.content.attributes?.find(
-        (a) => a.trait_type === "xlog_slug",
-      )?.value || "",
-    )
-
-    if (useStat) {
-      const stat = await (
-        await fetch(
-          `https://indexer.crossbell.io/v1/stat/notes/${page.characterId}/${page.noteId}`,
-        )
-      ).json()
-      page.metadata.content.views = stat.viewDetailCount
-    }
-
-    if (useScore) {
-      try {
-        const score = (
-          await (
-            await fetch(
-              `${SCORE_API_DOMAIN || SITE_URL}/api/score?cid=${toCid(
-                page.metadata?.uri || "",
-              )}`,
-            )
-          ).json()
-        ).data
-        page.metadata.content.score = score
-      } catch (e) {
-        // do nothing
-      }
-    }
-  }
-
-  return page
-}
+export type FeedType = "latest" | "following" | "topic" | "hot" | "search"
+export type SearchType = "latest" | "hot"
 
 export async function getFeed({
   type,
@@ -63,15 +13,24 @@ export async function getFeed({
   limit = 10,
   characterId,
   noteIds,
+  daysInterval,
+  searchKeyword,
+  searchType,
 }: {
-  type?: "latest" | "recommend" | "following" | "topic"
+  type?: FeedType
   cursor?: string
   limit?: number
   characterId?: number
   noteIds?: string[]
+  daysInterval?: number
+  searchKeyword?: string
+  searchType?: SearchType
 }) {
+  if (type === "search" && !searchKeyword) {
+    type = "latest"
+  }
   switch (type) {
-    case "latest":
+    case "latest": {
       const result = await indexer.getNotes({
         sources: "xlog",
         tags: ["post"],
@@ -82,7 +41,7 @@ export async function getFeed({
 
       const list = await Promise.all(
         result.list.map(async (page: any) => {
-          return expandPage(page, false, true)
+          return await expandCrossbellNote(page, false, true)
         }),
       )
 
@@ -91,7 +50,8 @@ export async function getFeed({
         cursor: result.cursor,
         count: result.count,
       }
-    case "following":
+    }
+    case "following": {
       if (!characterId) {
         return {
           list: [],
@@ -99,25 +59,18 @@ export async function getFeed({
           count: 0,
         }
       } else {
-        const result = await indexer.getFollowingFeedsOfCharacter(characterId, {
-          // sources: "xlog",
-          // tags: ["post"],
-          limit: limit * 2,
+        const result = await indexer.getNotesOfCharacterFollowing(characterId, {
+          sources: "xlog",
+          tags: ["post"],
+          limit: limit,
           cursor,
-          type: ["POST_NOTE"],
+          includeCharacter: true,
         })
 
         const list = await Promise.all(
-          result.list
-            .filter((page) => {
-              return (
-                page.note?.metadata?.content?.sources?.includes("xlog") &&
-                page.note?.metadata?.content?.tags?.includes("post")
-              )
-            })
-            .map(async (page: any) => {
-              return expandPage(page.note)
-            }),
+          result.list.map(async (page: any) => {
+            return await expandCrossbellNote(page)
+          }),
         )
 
         return {
@@ -126,7 +79,8 @@ export async function getFeed({
           count: result.count,
         }
       }
-    case "topic":
+    }
+    case "topic": {
       if (!noteIds) {
         return {
           list: [],
@@ -147,48 +101,145 @@ export async function getFeed({
             } }, characterId: { equals: ${note.split("-")[0]}}},`,
         )
         .join("\n")
-      const topicResult = await client
+      const result = await client
         .query(
           `
-            query getNotes {
-              notes(
-                where: {
-                  OR: [
-                    ${orString}
-                  ]
-                },
-                orderBy: [{ createdAt: desc }],
-                take: 1000,
-              ) {
-                characterId
-                noteId
-                character {
-                  handle
+              query getNotes {
+                notes(
+                  where: {
+                    OR: [
+                      ${orString}
+                    ]
+                  },
+                  orderBy: [{ createdAt: desc }],
+                  take: 1000,
+                ) {
+                  characterId
+                  noteId
+                  character {
+                    handle
+                    metadata {
+                      content
+                    }
+                  }
+                  createdAt
                   metadata {
+                    uri
                     content
                   }
                 }
-                createdAt
-                metadata {
-                  uri
-                  content
-                }
-              }
-            }`,
+              }`,
           {},
         )
         .toPromise()
 
-      const topicList = await Promise.all(
-        topicResult?.data?.notes.map(async (page: any) => {
-          return expandPage(page)
+      const list = await Promise.all(
+        result?.data?.notes.map(async (page: any) => {
+          return await expandCrossbellNote(page)
         }),
       )
 
       return {
-        list: topicList,
+        list: list,
         cursor: "",
-        count: topicList?.length || 0,
+        count: list?.length || 0,
       }
+    }
+    case "hot": {
+      const client = createClient({
+        url: "https://indexer.crossbell.io/v1/graphql",
+        exchanges: [cacheExchange, fetchExchange],
+      })
+
+      let time
+      if (daysInterval) {
+        time = dayjs().subtract(daysInterval, "day").toISOString()
+      }
+
+      const result = await client
+        .query(
+          `
+              query getNotes {
+                notes(
+                  where: {
+                    ${time ? `createdAt: { gt: "${time}" },` : ``}
+                    stat: { is: { viewDetailCount: { gt: 0 } } },
+                    metadata: { is: { content: { path: "sources", array_contains: "xlog" }, AND: { content: { path: "tags", array_contains: "post" } } } }
+                  },
+                  orderBy: { stat: { viewDetailCount: desc } },
+                  take: 50,
+                ) {
+                  stat {
+                    viewDetailCount
+                  }
+                  characterId
+                  noteId
+                  character {
+                    handle
+                    metadata {
+                      content
+                    }
+                  }
+                  createdAt
+                  metadata {
+                    uri
+                    content
+                  }
+                }
+              }`,
+          {},
+        )
+        .toPromise()
+
+      let list: ExpandedNote[] = await Promise.all(
+        result?.data?.notes.map(async (page: any) => {
+          if (daysInterval) {
+            const secondAgo = dayjs().diff(dayjs(page.createdAt), "second")
+            page.stat.hotScore =
+              page.stat.viewDetailCount / Math.max(Math.log10(secondAgo), 1)
+          }
+
+          return await expandCrossbellNote(page)
+        }),
+      )
+
+      if (daysInterval) {
+        list = list.sort((a, b) => {
+          if (a.stat?.hotScore && b.stat?.hotScore) {
+            return b.stat.hotScore - a.stat.hotScore
+          } else {
+            return 0
+          }
+        })
+      }
+
+      return {
+        list: list,
+        cursor: "",
+        count: list?.length || 0,
+      }
+    }
+    case "search": {
+      const result = await indexer.searchNotes(searchKeyword!, {
+        sources: ["xlog"],
+        tags: ["post"],
+        limit: limit,
+        cursor,
+        includeCharacterMetadata: true,
+        orderBy: searchType === "hot" ? "viewCount" : "createdAt",
+      })
+
+      const list = await Promise.all(
+        result.list.map(async (page: any) => {
+          return await expandCrossbellNote(page, false, false, searchKeyword)
+        }),
+      )
+
+      return {
+        list,
+        cursor: result.cursor,
+        count: result.count,
+      }
+    }
   }
 }

@@ -5,6 +5,12 @@ import { scroll } from "@uiw/codemirror-extensions-events"
 import type { EditorState } from "@codemirror/state"
 import { useState, useEffect, useMemo } from "react"
 import { useTranslation } from "next-i18next"
+import { useMobileLayout } from "~/hooks/useMobileLayout"
+import {
+  codemirrorReconfigureExtension,
+  useCodeMirrorAutoToggleTheme,
+} from "~/hooks/useCodemirrorTheme"
+import { useMediaStore } from "~/hooks/useDarkMode"
 
 export const Editor: React.FC<{
   value: string
@@ -25,6 +31,11 @@ export const Editor: React.FC<{
 }) => {
   const { t } = useTranslation("dashboard")
   const [extensions, setExtensions] = useState<any>([])
+  const isMobileLayout = useMobileLayout()
+  const [editor, setCmEditor] = useState<EditorView | null>(null)
+  const isDark = useMediaStore((state) => state.isDark)
+  useCodeMirrorAutoToggleTheme(editor, isDark)
+
   useEffect(() => {
     setExtensions([
       markdown(),
@@ -34,6 +45,7 @@ export const Editor: React.FC<{
           fontSize: "1rem",
           overflow: "auto",
           height: "100%",
+          padding: isMobileLayout ? "0 1.25rem" : "unset",
         },
         ".cm-content": {
           paddingBottom: "600px",
@@ -43,6 +55,7 @@ export const Editor: React.FC<{
         },
         "&.cm-editor": {
           height: "100%",
+          backgroundColor: "transparent",
         },
       }),
       EditorView.domEventHandlers({
@@ -79,16 +92,22 @@ export const Editor: React.FC<{
         },
       }),
       EditorView.lineWrapping,
+      ...codemirrorReconfigureExtension,
     ])
   }, [onScroll, handleDropFile])
 
   return useMemo(
     () => (
       <CodeMirror
-        className="px-5 h-full border-r w-1/2"
+        className={`h-full ${
+          isMobileLayout ? "w-full" : "border-r w-1/2 px-5"
+        }`}
         value={value}
         extensions={extensions}
-        onCreateEditor={onCreateEditor}
+        onCreateEditor={(view, state) => {
+          setCmEditor(view)
+          onCreateEditor?.(view, state)
+        }}
         basicSetup={{
           lineNumbers: false,
           foldGutter: false,
